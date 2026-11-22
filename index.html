@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pemantauan Laut & Analisis Stres Ikan IoT (Detail Pro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080c14; color: #e0e1dd; }
+        .glass-panel { background: rgba(18, 27, 51, 0.75); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen">
+    <!-- Top Bar Header -->
+    <header class="glass-panel rounded-2xl p-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
+        <div class="flex items-center space-x-3">
+            <div class="p-3 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/30">
+                <i class="fa-solid fa-water-ladder text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-wide">Marine-IoT Advanced Telemetry & Fish Stress Analyzer</h1>
+                <p class="text-xs text-slate-400">Buoy Node: ESP32 + LoRa/GSM | Depth Nodes MSN: 0.3m, 0.8m, 1.5m | Sonar 2D Radar</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap">
+            <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <span class="font-medium text-emerald-400">Sinyal IoT: Stabil (98%)</span>
+            </div>
+            <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs">
+                <i class="fa-solid fa-battery-full text-cyan-400"></i>
+                <span class="font-medium text-cyan-300">Solar Panel: 14.2V (Optimal)</span>
+            </div>
+            <button id="toggleSim" onclick="toggleSimulation()" class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg transition">
+                <i class="fa-solid fa-pause mr-1.5"></i> Jeda Real-Time
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Grid Dashboard -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Panel: Sonar & Fish Stress Index (5 cols) -->
+        <div class="lg:col-span-5 space-y-6">
+            <!-- Sonar Imaging Canvas with Range Adjustment -->
+            <div class="glass-panel rounded-2xl p-5 relative overflow-hidden shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-semibold text-cyan-300 flex items-center gap-2">
+                        <i class="fa-solid fa-radar"></i> Sonar Pencitraan 2D (Radar Ikan)
+                    </h2>
+                    <span id="fishCountBadge" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-bold">
+                        Deteksi: 0 Ikan
+                    </span>
+                </div>
+
+                <!-- Sonar Range & Detection Control Feature -->
+                <div class="mb-3 bg-slate-900/60 p-3 rounded-xl border border-slate-700/60 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i> Jangkauan Sonar (Radius)
+                        </span>
+                        <span id="rangeLabel" class="text-cyan-400 font-bold">50 Meter</span>
+                    </div>
+                    <input type="range" id="sonarRangeInput" min="10" max="100" value="50" step="5" 
+                           oninput="updateSonarRange(this.value)" 
+                           class="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg">
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span>10m</span><span>50m (Standar)</span><span>100m</span>
+                    </div>
+                </div>
+
+                <div class="relative flex justify-center items-center bg-slate-950/80 rounded-xl p-2 border border-slate-800">
+                    <canvas id="sonarCanvas" width="360" height="360" class="w-full max-w-[360px] h-auto"></canvas>
+                </div>
+                
+                <!-- Range Live Info Banner -->
+                <div class="mt-3 bg-cyan-950/40 border border-cyan-500/20 rounded-xl p-2.5 text-center text-xs text-cyan-200">
+                    <i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i> 
+                    Area Sapuan Efektif: <strong id="activeRangeText">0 - 50 Meter</strong> | Frekuensi Sonar: <span class="text-cyan-400 font-semibold">200 kHz</span>
+                </div>
+
+                <div class="mt-3 flex justify-around text-xs text-slate-400">
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Normal</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Stres Sedang</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span> Stres Tinggi</span>
+                </div>
+            </div>
+
+            <!-- Fish Stress Level Summary Card -->
+            <div class="glass-panel rounded-2xl p-5 shadow-lg">
+                <h2 class="text-sm font-semibold text-cyan-300 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-heart-pulse"></i> Indeks Tingkat Stres Ikan & Analisis AI
+                </h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block mb-1">Status Kesehatan</span>
+                        <span id="stressStatus" class="text-base font-bold text-emerald-400">Optimal</span>
+                        <p id="stressDesc" class="text-[11px] text-slate-400 mt-1">Parameter lingkungan air stabil. Metabolisme ikan normal.</p>
+                    </div>
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <span class="text-xs text-slate-400">Skor Stres (0-100)</span>
+                        <div class="flex items-baseline space-x-1">
+                            <span id="stressScore" class="text-3xl font-extrabold text-cyan-400">12</span>
+                            <span class="text-xs text-slate-400">/ 100</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mt-2">
+                            <div id="stressBar" class="bg-emerald-400 h-full transition-all duration-500" style="width: 12%"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Additional Detailed Metrics Inside Stress Panel -->
+                <div class="mt-4 pt-3 border-t border-slate-800 grid grid-cols-3 gap-2 text-center text-xs">
+                    <div class="bg-slate-900/40 p-2 rounded-lg">
+                        <span class="text-slate-400 block text-[10px]">Aktivitas Renang</span>
+                        <strong id="swimActivity" class="text-cyan-300">Aktif Normal</strong>
+                    </div>
+                    <div class="bg-slate-900/40 p-2 rounded-lg">
+                        <span class="text-slate-400 block text-[10px]">Risiko Mortalitas</span>
+                        <strong id="mortalityRisk" class="text-emerald-400">&lt; 1.5%</strong>
+                    </div>
+                    <div class="bg-slate-900/40 p-2 rounded-lg">
+                        <span class="text-slate-400 block text-[10px]">Rekomendasi Nelayan</span>
+                        <strong id="recAction" class="text-emerald-400">Layak Tangkap</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: MSN Sensor Nodes (0.3m, 0.8m, 1.5m) & Charts (7 cols) -->
+        <div class="lg:col-span-7 space-y-6">
+            
+            <!-- Sensor Nodes Array -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Node 0.3m -->
+                <div class="glass-panel rounded-2xl p-4 border-l-4 border-cyan-400 shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-cyan-400">Node MSN (0,3 Meter)</span>
+                        <span class="px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 text-[9px] rounded font-semibold">Permukaan</span>
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between text-slate-300"><span>Suhu:</span><strong id="temp-03">28.5 °C</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>pH Air:</span><strong id="ph-03">8.1</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Oksigen (DO):</span><strong id="do-03">6.8 mg/L</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Salinitas:</span><strong id="sal-03">33.2 ppt</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Kekeruhan:</span><strong id="turb-03">1.2 NTU</strong></div>
+                    </div>
+                </div>
+
+                <!-- Node 0.8m -->
+                <div class="glass-panel rounded-2xl p-4 border-l-4 border-blue-400 shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-blue-400">Node MSN (0,8 Meter)</span>
+                        <span class="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[9px] rounded font-semibold">Kolom Air</span>
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between text-slate-300"><span>Suhu:</span><strong id="temp-08">27.8 °C</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>pH Air:</span><strong id="ph-08">8.0</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Oksigen (DO):</span><strong id="do-08">6.5 mg/L</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Salinitas:</span><strong id="sal-08">34.0 ppt</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Kekeruhan:</span><strong id="turb-08">1.5 NTU</strong></div>
+                    </div>
+                </div>
+
+                <!-- Node 1.5m -->
+                <div class="glass-panel rounded-2xl p-4 border-l-4 border-indigo-400 shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-indigo-400">Node MSN (1,5 Meter)</span>
+                        <span class="px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 text-[9px] rounded font-semibold">Bawah/Termoklin</span>
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between text-slate-300"><span>Suhu:</span><strong id="temp-15">26.9 °C</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>pH Air:</span><strong id="ph-15">7.9</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Oksigen (DO):</span><strong id="do-15">6.1 mg/L</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Salinitas:</span><strong id="sal-15">34.5 ppt</strong></div>
+                        <div class="flex justify-between text-slate-300"><span>Kekeruhan:</span><strong id="turb-15">2.1 NTU</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="glass-panel rounded-2xl p-5 space-y-6 shadow-lg">
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-cyan-400"></i> Analisis Korelasi Tren Kualitas Air vs Jumlah & Stres Ikan
+                    </h3>
+                    <div class="h-52 relative">
+                        <canvas id="multiMetricsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="text-xs font-medium text-slate-400 mb-2">Profil Oksigen Terlarut (DO) Multi-Kedalaman</h4>
+                        <div class="h-32">
+                            <canvas id="doChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-medium text-slate-400 mb-2">Profil Suhu & Salinitas Rata-Rata</h4>
+                        <div class="h-32">
+                            <canvas id="tempSalChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Simulation Control & Advanced Telemetry Log -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Simulation Control -->
+                <div class="glass-panel rounded-2xl p-4 shadow-lg">
+                    <h3 class="text-xs font-semibold text-amber-400 mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders"></i> Simulasi Skenario Lingkungan
+                    </h3>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="triggerScenario('normal')" class="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-medium rounded-lg border border-emerald-500/30 transition text-left flex justify-between items-center">
+                            <span>Kondisi Normal (Stabil)</span> <i class="fa-solid fa-check text-emerald-400"></i>
+                        </button>
+                        <button onclick="triggerScenario('hypoxia')" class="px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-medium rounded-lg border border-rose-500/30 transition text-left flex justify-between items-center">
+                            <span>Hipoksia (Drop Oksigen &lt; 3 mg/L)</span> <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                        </button>
+                        <button onclick="triggerScenario('heatwave')" class="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-medium rounded-lg border border-amber-500/30 transition text-left flex justify-between items-center">
+                            <span>Heatwave (Suhu Ekstrem &gt; 32°C)</span> <i class="fa-solid fa-temperature-arrow-up text-amber-400"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Telemetry Status Log -->
+                <div class="glass-panel rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-semibold text-cyan-300 mb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-terminal"></i> Log Telemetri Perangkat IoT
+                        </h3>
+                        <div id="telemetryLog" class="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 text-[10px] font-mono text-slate-300 space-y-1 h-24 overflow-y-auto">
+                            <div>[10:22:05] LoRa Packet Received: Node Buoy ID-01 OK</div>
+                            <div>[10:22:10] Sensor MSN 0.3m: Temp 28.5C, pH 8.1</div>
+                            <div>[10:22:15] Sonar 2D Radar Scan: 24 Target detected within 50m</div>
+                            <div>[10:22:20] Cloud Sync via GSM: Database updated successfully.</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between items-center">
+                        <span>Lat/Lng: -6.1234, 106.8521 (Teluk Serang)</span>
+                        <span class="text-emerald-400 font-bold">● Live Sync</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let isSimulating = true;
+        let angle = 0;
+        let fishArray = [];
+        let maxFish = 30;
+        let currentSonarRange = 50;
+
+        for(let i=0; i < maxFish; i++) {
+            let r = Math.random() * 150 + 15;
+            let a = Math.random() * Math.PI * 2;
+            fishArray.push({
+                baseR: r,
+                baseA: a,
+                speed: 0.2 + Math.random() * 0.5,
+                stress: 0
+            });
+        }
+
+        const canvas = document.getElementById('sonarCanvas');
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        function updateSonarRange(val) {
+            currentSonarRange = parseInt(val);
+            document.getElementById('rangeLabel').innerText = currentSonarRange + " Meter";
+            document.getElementById('activeRangeText').innerText = `0 - ${currentSonarRange} Meter`;
+        }
+
+        function drawSonar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1.5;
+            for(let r = 40; r <= 150; r += 38) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(cx - 160, cy); ctx.lineTo(cx + 160, cy);
+            ctx.moveTo(cx, cy - 160); ctx.lineTo(cx, cy + 160);
+            ctx.stroke();
+
+            if (isSimulating) angle += 0.03;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, 160, angle, angle + 0.5);
+            ctx.closePath();
+            let grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 160);
+            grad.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+            grad.addColorStop(1, 'rgba(6, 182, 212, 0.05)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            let detectedCount = 0;
+            let canvasMaxRadius = 140; 
+            let maxRangePixels = (currentSonarRange / 100) * canvasMaxRadius;
+
+            fishArray.forEach(fish => {
+                if (isSimulating) {
+                    fish.baseA += 0.005 * fish.speed;
+                }
+
+                let currentRadius = (fish.baseR / 150) * canvasMaxRadius;
+
+                if (currentRadius <= maxRangePixels) {
+                    let fx = cx + Math.cos(fish.baseA) * currentRadius;
+                    let fy = cy + Math.sin(fish.baseA) * currentRadius;
+
+                    let color = '#34d399'; 
+                    if (fish.stress === 1) color = '#fbbf24'; 
+                    if (fish.stress === 2) color = '#f43f5e'; 
+
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+                    ctx.strokeStyle = color;
+                    ctx.globalAlpha = 0.3;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+
+                    detectedCount++;
+                }
+            });
+
+            document.getElementById('fishCountBadge').innerText = `Deteksi: ${detectedCount} Ikan (${currentSonarRange}m)`;
+            requestAnimationFrame(drawSonar);
+        }
+
+        drawSonar();
+
+        // Chart.js Configuration
+        const labels = ['10:00', '10:05', '10:10', '10:15', '10:20', '10:25', '10:30'];
+        
+        const ctxMulti = document.getElementById('multiMetricsChart').getContext('2d');
+        const multiChart = new Chart(ctxMulti, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Jumlah Ikan (Sonar)',
+                        data: [22, 23, 24, 21, 24, 22, 24],
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Indeks Stres (%)',
+                        data: [10, 12, 15, 12, 14, 11, 12],
+                        borderColor: '#f43f5e',
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { type: 'linear', display: true, position: 'left', grid: { color: '#1e293b' } },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } },
+                    x: { grid: { color: '#1e293b' } }
+                },
+                plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 12 } } }
+            }
+        });
+
+        const ctxDO = document.getElementById('doChart').getContext('2d');
+        const doChart = new Chart(ctxDO, {
+            type: 'bar',
+            data: {
+                labels: ['0.3m', '0.8m', '1.5m'],
+                datasets: [{
+                    label: 'DO (mg/L)',
+                    data: [6.8, 6.5, 6.1],
+                    backgroundColor: ['#38bdf8', '#60a5fa', '#818cf8'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 0, max: 10, grid: { color: '#1e293b' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        const ctxTS = document.getElementById('tempSalChart').getContext('2d');
+        const tsChart = new Chart(ctxTS, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Suhu (°C)', data: [28, 28.2, 28.5, 28.4, 28.3, 28.5, 28.5], borderColor: '#fbbf24', tension: 0.3 },
+                    { label: 'Salinitas (ppt)', data: [33, 33.1, 33.2, 33.2, 33.3, 33.2, 33.2], borderColor: '#34d399', tension: 0.3 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { grid: { color: '#1e293b' } }, x: { grid: { color: '#1e293b' } } },
+                plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 10 } } }
+            }
+        });
+
+        function triggerScenario(type) {
+            let stressScoreEl = document.getElementById('stressScore');
+            let stressStatusEl = document.getElementById('stressStatus');
+            let stressDescEl = document.getElementById('stressDesc');
+            let stressBar = document.getElementById('stressBar');
+            let swimEl = document.getElementById('swimActivity');
+            let mortEl = document.getElementById('mortalityRisk');
+            let recEl = document.getElementById('recAction');
+            let logBox = document.getElementById('telemetryLog');
+            let timeStr = new Date().toLocaleTimeString();
+
+            if (type === 'normal') {
+                stressScoreEl.innerText = "12";
+                stressStatusEl.innerText = "Optimal";
+                stressStatusEl.className = "text-base font-bold text-emerald-400";
+                stressDescEl.innerText = "Parameter lingkungan air stabil. Metabolisme ikan normal.";
+                stressBar.style.width = "12%";
+                stressBar.className = "bg-emerald-400 h-full transition-all duration-500";
+                swimEl.innerText = "Aktif Normal";
+                mortEl.innerText = "< 1.5%";
+                recEl.innerText = "Layak Tangkap";
+                recEl.className = "text-emerald-400";
+
+                document.getElementById('do-03').innerText = "6.8 mg/L";
+                document.getElementById('do-08').innerText = "6.5 mg/L";
+                document.getElementById('do-15').innerText = "6.1 mg/L";
+                
+                fishArray.forEach(f => f.stress = 0);
+                logBox.innerHTML += `<div>[${timeStr}] Simulasi: Kondisi Normal diterapkan. Air stabil.</div>`;
+            } else if (type === 'hypoxia') {
+                stressScoreEl.innerText = "78";
+                stressStatusEl.innerText = "Stres Tinggi (Bahaya)";
+                stressStatusEl.className = "text-base font-bold text-rose-500";
+                stressDescEl.innerText = "Oksigen terlarut drop drastis (<3 mg/L). Ikan mengalami asfiksia!";
+                stressBar.style.width = "78%";
+                stressBar.className = "bg-rose-500 h-full transition-all duration-500";
+                swimEl.innerText = "Lemas / Mengambang";
+                mortEl.innerText = "42.0%";
+                recEl.innerText = "Hentikan Penangkapan";
+                recEl.className = "text-rose-500";
+
+                document.getElementById('do-03').innerText = "2.8 mg/L";
+                document.getElementById('do-08').innerText = "2.4 mg/L";
+                document.getElementById('do-15').innerText = "1.9 mg/L";
+
+                fishArray.forEach(f => f.stress = 2);
+                logBox.innerHTML += `<div>[${timeStr}] ALERT: Hipoksia terdeteksi! DO < 3.0 mg/L di semua layer.</div>`;
+            } else if (type === 'heatwave') {
+                stressScoreEl.innerText = "48";
+                stressStatusEl.innerText = "Waspada (Stres Sedang)";
+                stressStatusEl.className = "text-base font-bold text-amber-400";
+                stressDescEl.innerText = "Suhu permukaan laut meningkat di atas batas normal (>32°C).";
+                stressBar.style.width = "48%";
+                stressBar.className = "bg-amber-400 h-full transition-all duration-500";
+                swimEl.innerText = "Pindah ke Kolom Dalam";
+                mortEl.innerText = "8.5%";
+                recEl.innerText = "Pantau Ketat";
+                recEl.className = "text-amber-400";
+
+                document.getElementById('temp-03').innerText = "32.4 °C";
+                document.getElementById('temp-08').innerText = "31.8 °C";
+                document.getElementById('temp-15').innerText = "30.5 °C";
+
+                fishArray.forEach(f => f.stress = 1);
+                logBox.innerHTML += `<div>[${timeStr}] WARNING: Suhu permukaan meningkat (Heatwave 32.4°C).</div>`;
+            }
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function toggleSimulation() {
+            isSimulating = !isSimulating;
+            const btn = document.getElementById('toggleSim');
+            if (isSimulating) {
+                btn.innerHTML = '<i class="fa-solid fa-pause mr-1.5"></i> Jeda Real-Time';
+                btn.className = "px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg transition";
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-play mr-1.5"></i> Lanjutkan Real-Time';
+                btn.className = "px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg transition";
+            }
+        }
+    </script>
+</body>
+</html>
